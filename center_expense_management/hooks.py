@@ -5,6 +5,14 @@ app_description = "Manages expense of centers"
 app_email = "ibrahim.abdulwahab@gmail.com"
 app_license = "mit"
 
+fixtures = [
+    {
+        "dt": "Workflow",
+        "filters": [
+            ["name", "=", "Petty Cash Settlement Workflow"]
+        ]
+    }
+]
 # Apps
 # ------------------
 

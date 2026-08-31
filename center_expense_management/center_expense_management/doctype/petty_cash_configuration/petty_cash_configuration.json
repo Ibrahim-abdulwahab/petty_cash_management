@@ -1,0 +1,78 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-30 16:46:03.305201",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_s3jg",
+  "center_officer",
+  "cost_center",
+  "petty_cash_account",
+  "petty_cash_limit"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_s3jg",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "center_officer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Center Officer",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Cost Center",
+   "options": "Cost Center",
+   "reqd": 1
+  },
+  {
+   "fieldname": "petty_cash_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Petty Cash Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "petty_cash_limit",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Petty Cash Limit",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-31 19:38:59.933613",
+ "modified_by": "Administrator",
+ "module": "Center Expense Management",
+ "name": "Petty Cash Configuration",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
