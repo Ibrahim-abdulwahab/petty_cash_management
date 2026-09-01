@@ -1,5 +1,5 @@
 # Copyright (c) 2026, OmniSync and contributors
-# For license information, please see license.txt
+# For license information, please see license.txt..
 
 import frappe
 from frappe.model.document import Document
@@ -31,22 +31,22 @@ class PettyCashSettlement(Document):
                 "A Petty Cash Settlement already exists for this Center Officer and month."
             )
 
- def load_petty_cash_configuration(self):
-    config = frappe.db.get_value(
-        "Petty Cash Configuration",
-        {"center_officer": self.center_officer},
-        ["cost_center", "petty_cash_account", "petty_cash_limit"],
-        as_dict=True
-    )
-
-    if not config:
-        frappe.throw(
-            "No Petty Cash Configuration was found for this Center Officer."
+    def load_petty_cash_configuration(self):
+        config = frappe.db.get_value(
+            "Petty Cash Configuration",
+            {"center_officer": self.center_officer},
+            ["cost_center", "petty_cash_account", "petty_cash_limit"],
+            as_dict=True
         )
 
-    self.cost_center = config.cost_center
-    self.petty_cash_account = config.petty_cash_account
-    self.petty_cash_limit = config.petty_cash_limit   
+        if not config:
+            frappe.throw(
+                "No Petty Cash Configuration was found for this Center Officer."
+            )
+
+        self.cost_center = config.cost_center
+        self.petty_cash_account = config.petty_cash_account
+        self.petty_cash_limit = config.petty_cash_limit
 
     def validate_expenses(self):
         if not self.expenses:
