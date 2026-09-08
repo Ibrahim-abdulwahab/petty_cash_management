@@ -14,22 +14,25 @@ class PettyCashSettlement(Document):
         self.calculate_totals()
 
     def validate_center_officer_and_month(self):
-        if not self.center_officer or not self.month:
-            return
-
-        existing = frappe.db.exists(
-            "Petty Cash Settlement",
-            {
-                "center_officer": self.center_officer,
-                "month": self.month,
-                "name": ["!=", self.name]
-            }
-        )
-
-        if existing:
-            frappe.throw(
-                "A Petty Cash Settlement already exists for this Center Officer and month."
-            )
+	    if not self.center_officer or not self.month:
+	        return
+	
+	    month_start = frappe.utils.get_first_day(self.month)
+	    month_end = frappe.utils.get_last_day(self.month)
+	
+	    existing = frappe.db.exists(
+	        "Petty Cash Settlement",
+	        {
+	            "center_officer": self.center_officer,
+	            "month": ["between", [month_start, month_end]],
+	            "name": ["!=", self.name]
+	        }
+	    )
+	
+	    if existing:
+	        frappe.throw(
+	            "A Petty Cash Settlement already exists for this Center Officer and month."
+	        )
 
     def load_petty_cash_configuration(self):
         config = frappe.db.get_value(
