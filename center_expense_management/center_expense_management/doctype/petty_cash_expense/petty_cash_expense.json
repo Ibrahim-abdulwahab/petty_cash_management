@@ -50,6 +50,7 @@
    "fieldname": "related_details",
    "fieldtype": "Small Text",
    "label": "Related Details"
+   "reqd": 1
   },
   {
    "fieldname": "amount",
@@ -62,7 +63,8 @@
    "description": "Attach the invoice or receipt for this expense.",
    "fieldname": "receipt",
    "fieldtype": "Attach",
-   "label": "Reciept"
+   "label": "Receipt"
+   "reqd": 1
   },
   {
    "fieldname": "expense_account",
