@@ -13,6 +13,10 @@ class PettyCashSettlement(Document):
         self.validate_expenses()
         self.calculate_totals()
 
+    def on_submit(self):
+        if self.workflow_state == "Completed":
+            self.create_whish_journal_entry()
+
     def validate_center_officer_and_month(self):
         if not self.center_officer or not self.month:
             return
@@ -87,3 +91,100 @@ class PettyCashSettlement(Document):
             frappe.throw(
                 "Total Expenses cannot exceed the Petty Cash Limit."
             )
+    def create_whish_journal_entry(self):
+        if self.payment_status == "Paid":
+            frappe.throw(
+                "This Petty Cash Settlement has already been paid."
+            )
+
+        if self.journal_entry:
+            frappe.throw(
+                "A Journal Entry is already linked to this settlement."
+            )
+
+        if self.payment_method != "Whish":
+            frappe.throw(
+                "Payment Method must be Whish."
+            )
+
+        if not self.payment_date:
+            frappe.throw(
+                "Payment Date is required before creating the Journal Entry."
+            )
+
+        whish_account = frappe.db.get_value(
+            "Account",
+            {
+                "name": "Whish - OS",
+                "is_group": 0,
+                "disabled": 0
+            },
+            ["name", "company"],
+            as_dict=True
+        )
+
+        if not whish_account:
+            frappe.throw(
+                "The Whish - OS account could not be found or is disabled."
+            )
+
+        company = whish_account.company
+
+        cost_center_company = frappe.db.get_value(
+            "Cost Center",
+            self.cost_center,
+            "company"
+        )
+
+        if cost_center_company != company:
+            frappe.throw(
+                "The Cost Center and Whish account belong to different companies."
+            )
+
+        for expense in self.expenses:
+            expense_account_company = frappe.db.get_value(
+                "Account",
+                expense.expense_account,
+                "company"
+            )
+
+            if expense_account_company != company:
+                frappe.throw(
+                    f"Expense row {expense.idx}: "
+                    f"Expense Account {expense.expense_account} "
+                    f"does not belong to Company {company}."
+                )
+
+        journal_entry = frappe.new_doc("Journal Entry")
+
+        journal_entry.posting_date = self.payment_date
+        journal_entry.company = company
+        journal_entry.user_remark = (
+            f"Petty Cash Settlement {self.name}"
+        )
+
+        for expense in self.expenses:
+            journal_entry.append(
+                "accounts",
+                {
+                    "account": expense.expense_account,
+                    "debit_in_account_currency": expense.amount,
+                    "cost_center": self.cost_center
+                }
+            )
+
+        journal_entry.append(
+            "accounts",
+            {
+                "account": whish_account.name,
+                "credit_in_account_currency": self.total_expenses
+            }
+        )
+
+        journal_entry.insert()
+        journal_entry.submit()
+
+        self.db_set("journal_entry", journal_entry.name)
+        self.db_set("payment_status", "Paid")
+
+        return journal_entry.name
