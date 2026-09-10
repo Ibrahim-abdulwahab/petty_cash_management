@@ -76,16 +76,6 @@ frappe.ui.form.on('Petty Cash Settlement', {
                 });
             }
         }
-
-        // Journal Entry required when Treasurer completes
-        if (
-            frm.selected_workflow_action === 'Complete' &&
-            !frm.doc.journal_entry
-        ) {
-            frappe.throw(
-                __('A Journal Entry must be selected before completing the settlement.')
-            );
-        }
     },
 
     validate: function(frm) {
