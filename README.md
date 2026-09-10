@@ -2,7 +2,7 @@
 
 A Frappe application for managing **center petty cash expenses and monthly petty cash settlements**.
 
-The application allows center officers to record expenses, automatically calculate petty cash balances, and submit monthly settlements through a controlled approval workflow.
+The application allows Center Officers to record their monthly expenses, automatically calculate petty cash balances, and submit settlements through a controlled approval workflow. Once approved, the Treasurer can process the payment through **Whish**, with the application automatically creating the corresponding ERPNext Journal Entry.
 
 ## Features
 
@@ -10,24 +10,34 @@ The application allows center officers to record expenses, automatically calcula
 * Monthly Petty Cash Settlement
 * Expense tracking with:
 
-  * Expense item
-  * Expense date
-  * Invoice number
+  * Expense Item
+  * Expense Date
+  * Invoice Number
   * Supplier
-  * Expense account
-  * Related details
+  * Expense Account
+  * Related Details
   * Amount
-  * Invoice/receipt attachment
+  * Invoice/Receipt Attachment
+* Automatic loading of:
+
+  * Cost Center
+  * Petty Cash Account
+  * Petty Cash Limit
 * Automatic calculation of:
 
-  * Petty Cash Limit
   * Total Expenses
   * Remaining Balance
 * Validation of expense amounts and required information
 * Prevention of duplicate monthly settlements for the same Center Officer
-* Receipt requirement for expenses
+* Mandatory receipt for every expense
+* Server-side validation to prevent expenses exceeding the petty cash limit
 * Monthly settlement approval workflow
-* Journal Entry requirement before completing a settlement
+* Accountant and Operations return/rejection capability
+* Whish payment processing
+* Automatic Journal Entry creation when the Treasurer completes the settlement
+* Automatic linking of the Journal Entry to the settlement
+* Automatic payment status update to `Paid`
+* Prevention of duplicate payment processing
 
 ## DocTypes
 
@@ -40,31 +50,63 @@ Stores the petty cash configuration for each Center Officer, including:
 * Petty Cash Account
 * Petty Cash Limit
 
+The configuration determines the petty cash amount available to the Center Officer and the accounting information used by monthly settlements.
+
 ### Petty Cash Expense
 
-Child table used to record individual expenses within a settlement.
+Child table used to record individual expenses within a Petty Cash Settlement.
+
+Each expense contains:
+
+* Expense Item
+* Expense Date
+* Invoice Number
+* Supplier
+* Expense Account
+* Related Details
+* Amount
+* Receipt
 
 ### Petty Cash Settlement
 
-The main document used to submit and process a Center Officer's monthly petty cash settlement.
+The main document used to create, review, approve, and process a Center Officer's monthly petty cash settlement.
+
+It contains:
+
+* Center Officer
+* Month
+* Cost Center
+* Petty Cash Account
+* Petty Cash Limit
+* Total Expenses
+* Remaining Balance
+* Expenses
+* Payment Method
+* Payment Date
+* Journal Entry
+* Payment Status
 
 ## Workflow
 
 The Petty Cash Settlement follows this workflow:
 
 ```text
-Center Officer
-      │
-      ▼
+Draft
+  │
+  │ Submit for Accountant Review
+  ▼
 Pending Accountant Review
-      │
-      ▼
+  │
+  │ Approve
+  ▼
 Pending Operations Approval
-      │
-      ▼
+  │
+  │ Approve
+  ▼
 Pending Treasurer Processing
-      │
-      ▼
+  │
+  │ Complete
+  ▼
 Completed
 ```
 
@@ -77,9 +119,60 @@ Completed
 | Operations Approval  | Operations     |
 | Treasurer Processing | Treasurer      |
 
-The Accountant and Operations users can return a settlement to the Center Officer for correction.
+The Accountant and Operations users can return a settlement to the Center Officer when corrections are required.
 
-Before completion, the Treasurer must select the related Journal Entry.
+When the Treasurer completes the settlement, the application automatically creates and submits the required Journal Entry.
+
+## Accounting / Whish Payment
+
+The Treasurer processes approved settlements using **Whish**.
+
+The application automatically creates a Journal Entry when the settlement moves from:
+
+```text
+Pending Treasurer Processing
+        ↓
+Completed
+```
+
+The Journal Entry records:
+
+```text
+Debit  → Expense Account(s)
+Credit → Whish - OS
+```
+
+For example, if a settlement contains a 100 expense:
+
+```text
+Dr  Miscellaneous Expenses - OS    100
+Cr  Whish - OS                     100
+```
+
+The expense debit entries use the settlement's configured **Cost Center**.
+
+If multiple expenses exist, each expense is posted separately:
+
+```text
+Dr  Expense Account 1              Amount 1
+Dr  Expense Account 2              Amount 2
+Dr  Expense Account 3              Amount 3
+...
+Cr  Whish - OS                     Total Expenses
+```
+
+The Journal Entry:
+
+* Uses the settlement's Payment Date as the posting date.
+* Uses the same company as the Whish account.
+* Posts each expense to its selected Expense Account.
+* Applies the settlement Cost Center to expense entries.
+* Credits the `Whish - OS` account with the total settlement amount.
+* Is automatically submitted.
+* Is automatically linked to the Petty Cash Settlement.
+* Changes the settlement Payment Status to `Paid`.
+
+The application also validates that the Whish account, Cost Center, and Expense Accounts belong to the same company.
 
 ## User Guide
 
@@ -102,7 +195,7 @@ Enter:
 
 Save the configuration.
 
-The configuration is used automatically when the Center Officer creates a Petty Cash Settlement.
+The configuration is automatically used when the Center Officer creates a Petty Cash Settlement.
 
 ### 2. Create a Monthly Petty Cash Settlement
 
@@ -119,7 +212,7 @@ Select:
 * **Center Officer**
 * **Month**
 
-The following fields are populated automatically from the Center Officer's Petty Cash Configuration:
+The following fields are automatically populated from the Center Officer's Petty Cash Configuration:
 
 * Cost Center
 * Petty Cash Account
@@ -131,11 +224,11 @@ The Center Officer must then add each expense separately in the **Expenses** tab
 
 Each expense should be entered as a separate row.
 
-Complete the required information:
+Complete the expense information:
 
 | Field           | Description                                         |
 | --------------- | --------------------------------------------------- |
-| Expense Item    | Description/category of the expense                 |
+| Expense Item    | Description or category of the expense              |
 | Expense Date    | Date the expense occurred                           |
 | Invoice Number  | Invoice or receipt number, if available             |
 | Supplier        | Supplier associated with the expense, if applicable |
@@ -144,7 +237,7 @@ Complete the required information:
 | Amount          | Amount paid                                         |
 | Receipt         | Invoice or receipt attachment                       |
 
-A receipt/invoice must be attached to each expense.
+A receipt must be attached to every expense.
 
 The application automatically calculates:
 
@@ -182,6 +275,7 @@ The Accountant should verify:
 * Cost Center
 * Petty Cash Account
 * Total Expenses
+* Petty Cash Limit
 
 If everything is correct, the Accountant approves the settlement.
 
@@ -195,13 +289,14 @@ If corrections are required, the Accountant can return the settlement to the Cen
 
 ### 6. Operations Approval
 
-The Operations user performs the final operational review.
+The Operations user performs the operational review.
 
 The Operations user should verify that:
 
 * The expenses are appropriate.
 * Required supporting documents are attached.
 * The settlement information is complete.
+* The expense accounts are correct.
 * The total amount is within the petty cash limit.
 
 If approved, the workflow moves to:
@@ -214,57 +309,138 @@ If corrections are required, Operations can return the settlement to the Center 
 
 ### 7. Treasurer Processing
 
-The Treasurer is responsible for the final accounting/payment step.
+The Treasurer performs the final payment and accounting step.
 
-Before completing the settlement, the Treasurer must create or identify the appropriate **Journal Entry** in ERPNext.
+The Treasurer should:
 
-The Journal Entry should record the settlement's expenses against the configured Petty Cash Account.
+1. Open the settlement in **Pending Treasurer Processing**.
+2. Verify the expenses and total amount.
+3. Select:
 
-After the Journal Entry has been created:
+   * **Payment Method:** `Whish`
+   * **Payment Date:** Date on which the payment is processed.
+4. Click **Complete**.
 
-1. Open the Petty Cash Settlement.
-2. Select the related Journal Entry in the **Journal Entry** field.
-3. Verify that the Journal Entry corresponds to the settlement.
-4. Complete the workflow.
+When the Treasurer completes the workflow, the application automatically:
 
-The Journal Entry is required before the settlement can be completed.
+1. Validates the Whish account.
+2. Validates the Cost Center and company.
+3. Validates each Expense Account and company.
+4. Creates a Journal Entry.
+5. Adds a debit entry for each expense.
+6. Applies the settlement Cost Center to the expense entries.
+7. Credits `Whish - OS` with the total expenses.
+8. Submits the Journal Entry.
+9. Stores the Journal Entry number in the settlement.
+10. Changes Payment Status from `Unpaid` to `Paid`.
 
-The workflow then moves to:
+The settlement then reaches:
 
 ```text
 Completed
 ```
 
-### 8. Returning a Settlement for Correction
+No manual Journal Entry creation or selection is required from the Treasurer.
 
-A settlement can be returned to the Center Officer during the review stages.
+### 8. Payment Fields
 
-If the Accountant or Operations user returns a settlement:
+The settlement contains the following payment-related fields:
+
+| Field          | Description                                                             |
+| -------------- | ----------------------------------------------------------------------- |
+| Payment Method | Payment method used for the settlement. Currently `Whish`.              |
+| Payment Date   | Date used as the Journal Entry posting date.                            |
+| Journal Entry  | Automatically populated with the Journal Entry created for the payment. |
+| Payment Status | Shows whether the settlement has been paid.                             |
+
+The normal payment status is:
 
 ```text
-Accountant / Operations
-          │
-          ▼
-Center Officer
+Unpaid
 ```
 
-The Center Officer can correct the settlement and submit it again for review.
+After successful Treasurer processing:
 
-### 9. Monthly Settlement Rules
+```text
+Paid
+```
+
+### 9. Returning a Settlement for Correction
+
+A settlement can be returned to the Center Officer during the Accountant and Operations review stages.
+
+For example:
+
+```text
+Accountant
+     │
+     │ Return
+     ▼
+Center Officer
+     │
+     │ Correct and resubmit
+     ▼
+Accountant Review
+```
+
+The same applies when Operations returns a settlement.
+
+The Center Officer can correct the expenses or supporting information and submit the settlement again.
+
+### 10. Monthly Settlement Rules
 
 The application enforces several rules to maintain data integrity:
 
 * Each Center Officer can have only one settlement for a given month.
-* At least one expense must be entered.
+* At least one expense is required.
 * Expense amounts must be greater than zero.
-* An Expense Account is required for each expense.
-* A receipt is required for each expense.
+* An Expense Account is required for every expense.
+* A receipt is required for every expense.
 * Total Expenses cannot exceed the configured Petty Cash Limit.
-* Cost Center, Petty Cash Account, and Petty Cash Limit are loaded from the Center Officer's configuration.
+* Cost Center is automatically loaded from the Center Officer's configuration.
+* Petty Cash Account is automatically loaded from the Center Officer's configuration.
+* Petty Cash Limit is automatically loaded from the Center Officer's configuration.
+* The Whish account must exist, be enabled, and belong to the correct company.
+* The Cost Center must belong to the same company as the Whish account.
+* Every Expense Account must belong to the same company as the Whish account.
+* A settlement cannot be paid twice.
+* A settlement cannot create multiple Journal Entries for the same payment.
+
+## Validation
+
+Validation is performed at the application/server level to protect the data even if client-side validation is bypassed.
+
+The settlement validates:
+
+```text
+Center Officer + Month
+        ↓
+Petty Cash Configuration
+        ↓
+Expenses
+        ↓
+Expense Accounts
+        ↓
+Receipts
+        ↓
+Total Expenses
+        ↓
+Petty Cash Limit
+```
+
+If the total expenses exceed the configured limit, the settlement is rejected:
+
+```text
+Total Expenses cannot exceed the Petty Cash Limit.
+```
+
+This validation is performed on the server and is not dependent solely on browser-side scripts.
 
 ## Installation
 
-You can install this app using the Frappe `bench` CLI:
+The application is intended for **Frappe Framework v16**.
+
+Install the app using the Frappe `bench` CLI:
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
@@ -274,22 +450,48 @@ bench get-app https://github.com/Ibrahim-abdulwahab/petty_cash_management.git --
 bench --site $SITE_NAME install-app center_expense_management
 ```
 
-The application is currently intended for **Frappe Framework v16**.
+After installation, migrate the site:
+
+```bash
+bench --site $SITE_NAME migrate
+```
+
+Clear the cache if necessary:
+
+```bash
+bench --site $SITE_NAME clear-cache
+```
 
 ## Configuration
 
 After installing the application:
 
-1. Create the required user roles:
+1. Create or verify the required user roles:
 
    * Center Officer
    * Accountant
    * Operations
    * Treasurer
+
 2. Create a **Petty Cash Configuration** for each Center Officer.
-3. Configure the appropriate Cost Center and Petty Cash Account.
-4. Set the Center Officer's Petty Cash Limit.
-5. Ensure the Petty Cash Settlement workflow is installed and active.
+
+3. Configure the appropriate:
+
+   * Cost Center
+   * Petty Cash Account
+   * Petty Cash Limit
+
+4. Ensure the required Expense Accounts exist and belong to the correct company.
+
+5. Ensure the Whish account exists and is enabled:
+
+   ```text
+   Whish - OS
+   ```
+
+6. Ensure the **Petty Cash Settlement Workflow** is installed and active.
+
+7. Ensure the users responsible for each workflow stage have the appropriate roles and permissions.
 
 ## Development
 
@@ -299,11 +501,58 @@ Enable developer mode on the development site:
 bench set-config -g developer_mode 1
 ```
 
-After making changes to application assets:
+After making changes to application code or DocTypes, migrate the site:
+
+```bash
+bench --site $SITE_NAME migrate
+```
+
+Clear the cache:
 
 ```bash
 bench --site $SITE_NAME clear-cache
+```
+
+If application assets have been changed, build the application:
+
+```bash
 bench build --app center_expense_management
+```
+
+Restart the bench when required:
+
+```bash
+bench restart
+```
+
+### Python Syntax Check
+
+The main settlement controller can be checked with:
+
+```bash
+python3 -m py_compile center_expense_management/doctype/petty_cash_settlement/petty_cash_settlement.py
+```
+
+No output indicates that the Python file passed the syntax check.
+
+## GitHub Repository
+
+The project is maintained in the following GitHub repository:
+
+```text
+https://github.com/Ibrahim-abdulwahab/petty_cash_management
+```
+
+The main development branch is:
+
+```text
+version-16
+```
+
+The Frappe application contained in the repository is:
+
+```text
+center_expense_management
 ```
 
 ## Contributing
@@ -335,10 +584,51 @@ Then:
 ```bash
 git add .
 git commit -m "Describe your changes"
-git push
+git push origin version-16
 ```
+
+If the remote branch contains changes that are intentionally being replaced by the local branch, a force push can be used carefully:
+
+```bash
+git push origin version-16 --force
+```
+
+## Project Structure
+
+The main application structure is:
+
+```text
+center_expense_management/
+│
+├── center_expense_management/
+│   ├── center_expense_management/
+│   │   └── doctype/
+│   │       ├── petty_cash_configuration/
+│   │       ├── petty_cash_expense/
+│   │       └── petty_cash_settlement/
+│   │
+│   ├── hooks.py
+│   └── modules.txt
+│
+├── README.md
+├── license.txt
+├── pyproject.toml
+└── requirements.txt
+```
+
+The main Petty Cash Settlement controller is responsible for:
+
+* Loading petty cash configuration
+* Validating the Center Officer and month
+* Validating expenses
+* Calculating totals
+* Enforcing the petty cash limit
+* Creating the Whish Journal Entry
+* Linking the Journal Entry to the settlement
+* Updating the payment status
 
 ## License
 
 MIT
+
 
