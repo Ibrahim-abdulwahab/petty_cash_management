@@ -2,7 +2,9 @@
 
 A Frappe application for managing **center petty cash expenses and monthly petty cash settlements**.
 
-The application allows Center Officers to record their monthly expenses, automatically calculate petty cash balances, and submit settlements through a controlled approval workflow. Once approved, the Treasurer can process the payment through **Whish**, with the application automatically creating the corresponding ERPNext Journal Entry.
+The application allows Center Officers to record their monthly expenses, automatically calculate petty cash balances, and submit settlements through a controlled multi-stage approval workflow.
+
+Once approved, the Treasurer can process the payment through **Whish**. The application automatically creates the corresponding ERPNext Journal Entry, marks the settlement as paid, and generates a **PDF Petty Cash Settlement Report** that is attached to the settlement.
 
 ## Features
 
@@ -31,13 +33,22 @@ The application allows Center Officers to record their monthly expenses, automat
 * Prevention of duplicate monthly settlements for the same Center Officer
 * Mandatory receipt for every expense
 * Server-side validation to prevent expenses exceeding the petty cash limit
-* Monthly settlement approval workflow
-* Accountant and Operations return/rejection capability
+* Multi-stage settlement approval workflow
+* Accountant Review
+* Finance Review
+* Operations Approval
+* Treasurer Processing
+* Accountant return-to-Center-Officer capability
+* Finance return-to-Accountant capability
+* Operations return-to-Finance capability
 * Whish payment processing
 * Automatic Journal Entry creation when the Treasurer completes the settlement
 * Automatic linking of the Journal Entry to the settlement
 * Automatic payment status update to `Paid`
+* Automatic PDF settlement report generation
+* Automatic attachment of the PDF report to the settlement
 * Prevention of duplicate payment processing
+* Prevention of duplicate Journal Entry creation
 
 ## DocTypes
 
@@ -86,9 +97,11 @@ It contains:
 * Journal Entry
 * Payment Status
 
+The settlement also receives an automatically generated PDF report after successful Treasurer processing.
+
 ## Workflow
 
-The Petty Cash Settlement follows this workflow:
+The Petty Cash Settlement follows a multi-stage approval workflow:
 
 ```text
 Draft
@@ -96,6 +109,10 @@ Draft
   │ Submit for Accountant Review
   ▼
 Pending Accountant Review
+  │
+  │ Approve
+  ▼
+Pending Finance Review
   │
   │ Approve
   ▼
@@ -110,18 +127,51 @@ Pending Treasurer Processing
 Completed
 ```
 
-### Roles
+### Workflow Roles
 
 | Stage                | Role           |
 | -------------------- | -------------- |
 | Draft / Submission   | Center Officer |
 | Accountant Review    | Accountant     |
+| Finance Review       | Finance        |
 | Operations Approval  | Operations     |
 | Treasurer Processing | Treasurer      |
 
-The Accountant and Operations users can return a settlement to the Center Officer when corrections are required.
+### Workflow Return Paths
 
-When the Treasurer completes the settlement, the application automatically creates and submits the required Journal Entry.
+The workflow allows corrections to be requested at different review stages.
+
+#### Accountant → Center Officer
+
+```text
+Pending Accountant Review
+        │
+        │ Return to Center Officer
+        ▼
+      Draft
+```
+
+#### Finance → Accountant
+
+```text
+Pending Finance Review
+        │
+        │ Return to Accountant
+        ▼
+Pending Accountant Review
+```
+
+#### Operations → Finance
+
+```text
+Pending Operations Approval
+        │
+        │ Return to Finance
+        ▼
+Pending Finance Review
+```
+
+This provides a controlled review chain where each department can return the settlement to the appropriate preceding stage rather than restarting the entire process.
 
 ## Accounting / Whish Payment
 
@@ -149,8 +199,6 @@ Dr  Miscellaneous Expenses - OS    100
 Cr  Whish - OS                     100
 ```
 
-The expense debit entries use the settlement's configured **Cost Center**.
-
 If multiple expenses exist, each expense is posted separately:
 
 ```text
@@ -161,18 +209,110 @@ Dr  Expense Account 3              Amount 3
 Cr  Whish - OS                     Total Expenses
 ```
 
+The expense debit entries use the settlement's configured **Cost Center**.
+
 The Journal Entry:
 
 * Uses the settlement's Payment Date as the posting date.
 * Uses the same company as the Whish account.
 * Posts each expense to its selected Expense Account.
-* Applies the settlement Cost Center to expense entries.
+* Applies the settlement Cost Center to the expense entries.
 * Credits the `Whish - OS` account with the total settlement amount.
 * Is automatically submitted.
 * Is automatically linked to the Petty Cash Settlement.
 * Changes the settlement Payment Status to `Paid`.
 
 The application also validates that the Whish account, Cost Center, and Expense Accounts belong to the same company.
+
+### Payment Protection
+
+The application prevents:
+
+* Paying the same settlement more than once.
+* Creating multiple Journal Entries for the same settlement.
+* Using a disabled or missing Whish account.
+* Using Expense Accounts belonging to a different company.
+* Using a Cost Center belonging to a different company from the Whish account.
+
+## PDF Settlement Report
+
+When the Treasurer successfully completes a settlement, the application automatically generates a **Petty Cash Settlement Report PDF**.
+
+The PDF is generated after the Journal Entry has been created and the settlement has been marked as `Paid`.
+
+The generated report is automatically attached to the **Petty Cash Settlement** as a private Frappe File.
+
+### PDF Report Contents
+
+The report includes:
+
+* Report title
+* Settlement number
+* Center Officer
+* Month
+* Cost Center
+* Petty Cash Account
+* Petty Cash Limit
+* Payment Method
+* Payment Date
+* Payment Status
+* Detailed expense table
+* Expense Date
+* Expense Item
+* Invoice Number
+* Supplier
+* Related Details
+* Expense Amount
+* Total Expenses
+* Remaining Balance
+* Journal Entry number
+* Payment Status
+* System-generated report footer
+
+The expense table contains one row for each expense recorded in the settlement.
+
+### PDF Layout
+
+The report is generated in **A4 landscape format** and uses a structured table-based layout with:
+
+* Centered report title
+* Settlement information section
+* Expense details table
+* Highlighted table headers
+* Totals section
+* Payment and Journal Entry information
+* System-generated footer
+
+The PDF is stored as a private file and attached directly to the corresponding settlement.
+
+### PDF Generation Flow
+
+```text
+Treasurer clicks Complete
+        │
+        ▼
+Validate Whish Payment
+        │
+        ▼
+Create Journal Entry
+        │
+        ▼
+Submit Journal Entry
+        │
+        ▼
+Mark Payment Status = Paid
+        │
+        ▼
+Generate PDF Report
+        │
+        ▼
+Attach PDF to Settlement
+        │
+        ▼
+Settlement = Completed
+```
+
+The Treasurer does not need to manually create or attach the report.
 
 ## User Guide
 
@@ -282,14 +422,39 @@ If everything is correct, the Accountant approves the settlement.
 The workflow moves to:
 
 ```text
-Pending Operations Approval
+Pending Finance Review
 ```
 
 If corrections are required, the Accountant can return the settlement to the Center Officer.
 
-### 6. Operations Approval
+### 6. Finance Review
 
-The Operations user performs the operational review.
+The Finance user performs the financial review after Accountant approval.
+
+The Finance user should verify:
+
+* Expense amounts
+* Expense Accounts
+* Receipts/invoices
+* Cost Center
+* Petty Cash Account
+* Petty Cash Limit
+* Total Expenses
+* Accounting correctness of the settlement
+
+If everything is correct, the Finance user approves the settlement.
+
+The workflow moves to:
+
+```text
+Pending Operations Approval
+```
+
+If corrections are required, Finance can return the settlement to the Accountant.
+
+### 7. Operations Approval
+
+The Operations user performs the operational review after Finance approval.
 
 The Operations user should verify that:
 
@@ -305,9 +470,9 @@ If approved, the workflow moves to:
 Pending Treasurer Processing
 ```
 
-If corrections are required, Operations can return the settlement to the Center Officer.
+If corrections are required, Operations can return the settlement to Finance.
 
-### 7. Treasurer Processing
+### 8. Treasurer Processing
 
 The Treasurer performs the final payment and accounting step.
 
@@ -333,6 +498,8 @@ When the Treasurer completes the workflow, the application automatically:
 8. Submits the Journal Entry.
 9. Stores the Journal Entry number in the settlement.
 10. Changes Payment Status from `Unpaid` to `Paid`.
+11. Generates the Petty Cash Settlement PDF.
+12. Attaches the PDF to the settlement.
 
 The settlement then reaches:
 
@@ -340,9 +507,21 @@ The settlement then reaches:
 Completed
 ```
 
-No manual Journal Entry creation or selection is required from the Treasurer.
+No manual Journal Entry creation or PDF generation is required from the Treasurer.
 
-### 8. Payment Fields
+### 9. View the Settlement PDF
+
+After the Treasurer completes the settlement:
+
+1. Open the completed **Petty Cash Settlement**.
+2. Locate the **Attachments** section.
+3. Open the generated PDF.
+
+The PDF contains the settlement information, expense details, totals, payment status, and Journal Entry information.
+
+The report is generated automatically and stored as a private attachment.
+
+### 10. Payment Fields
 
 The settlement contains the following payment-related fields:
 
@@ -365,29 +544,55 @@ After successful Treasurer processing:
 Paid
 ```
 
-### 9. Returning a Settlement for Correction
+### 11. Returning a Settlement for Correction
 
-A settlement can be returned to the Center Officer during the Accountant and Operations review stages.
+A settlement can be returned during multiple stages of the approval process.
 
-For example:
+#### Accountant → Center Officer
 
 ```text
-Accountant
-     │
-     │ Return
-     ▼
-Center Officer
-     │
-     │ Correct and resubmit
-     ▼
-Accountant Review
+Pending Accountant Review
+        │
+        │ Return to Center Officer
+        ▼
+Draft
+        │
+        │ Correct and resubmit
+        ▼
+Pending Accountant Review
 ```
 
-The same applies when Operations returns a settlement.
+#### Finance → Accountant
 
-The Center Officer can correct the expenses or supporting information and submit the settlement again.
+```text
+Pending Finance Review
+        │
+        │ Return to Accountant
+        ▼
+Pending Accountant Review
+        │
+        │ Approve
+        ▼
+Pending Finance Review
+```
 
-### 10. Monthly Settlement Rules
+#### Operations → Finance
+
+```text
+Pending Operations Approval
+        │
+        │ Return to Finance
+        ▼
+Pending Finance Review
+        │
+        │ Approve
+        ▼
+Pending Operations Approval
+```
+
+This staged return process ensures that corrections are reviewed by the appropriate preceding department.
+
+## Monthly Settlement Rules
 
 The application enforces several rules to maintain data integrity:
 
@@ -405,6 +610,7 @@ The application enforces several rules to maintain data integrity:
 * Every Expense Account must belong to the same company as the Whish account.
 * A settlement cannot be paid twice.
 * A settlement cannot create multiple Journal Entries for the same payment.
+* A settlement generates its PDF report after successful payment processing.
 
 ## Validation
 
@@ -462,6 +668,12 @@ Clear the cache if necessary:
 bench --site $SITE_NAME clear-cache
 ```
 
+Restart the bench when required:
+
+```bash
+bench restart
+```
+
 ## Configuration
 
 After installing the application:
@@ -470,6 +682,7 @@ After installing the application:
 
    * Center Officer
    * Accountant
+   * Finance
    * Operations
    * Treasurer
 
@@ -555,6 +768,14 @@ The Frappe application contained in the repository is:
 center_expense_management
 ```
 
+The Petty Cash Settlement workflow is stored as an application fixture:
+
+```text
+center_expense_management/fixtures/workflow.json
+```
+
+This ensures that the workflow configuration, including the Finance Review stage, can be tracked in Git and included when the application is deployed or installed on another Frappe site.
+
 ## Contributing
 
 This app uses `pre-commit` for code formatting and linting.
@@ -590,8 +811,10 @@ git push origin version-16
 If the remote branch contains changes that are intentionally being replaced by the local branch, a force push can be used carefully:
 
 ```bash
-git push origin version-16 --force
+git push origin version-16 --force-with-lease
 ```
+
+`--force-with-lease` is preferred over `--force` because it helps prevent accidentally overwriting changes that were pushed to the remote branch by someone else.
 
 ## Project Structure
 
@@ -606,6 +829,9 @@ center_expense_management/
 │   │       ├── petty_cash_configuration/
 │   │       ├── petty_cash_expense/
 │   │       └── petty_cash_settlement/
+│   │
+│   ├── fixtures/
+│   │   └── workflow.json
 │   │
 │   ├── hooks.py
 │   └── modules.txt
@@ -624,8 +850,11 @@ The main Petty Cash Settlement controller is responsible for:
 * Calculating totals
 * Enforcing the petty cash limit
 * Creating the Whish Journal Entry
+* Validating accounting company consistency
 * Linking the Journal Entry to the settlement
 * Updating the payment status
+* Generating the PDF settlement report
+* Attaching the PDF report to the settlement
 
 ## License
 
