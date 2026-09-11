@@ -2,7 +2,11 @@
 # For license information, please see license.txt..
 
 import frappe
+
+from frappe import _
 from frappe.model.document import Document
+from frappe.utils import escape_html, flt, formatdate
+from frappe.utils.pdf import get_pdf
 
 
 class PettyCashSettlement(Document):
@@ -13,9 +17,14 @@ class PettyCashSettlement(Document):
         self.validate_expenses()
         self.calculate_totals()
 
-    def on_submit(self):
-        if self.workflow_state == "Completed":
+    def on_update(self):
+        if (
+            self.workflow_state == "Completed"
+            and self.has_value_changed("workflow_state")
+        ):
             self.create_whish_journal_entry()
+            self.reload()
+            self.generate_pdf_report()
 
     def validate_center_officer_and_month(self):
         if not self.center_officer or not self.month:
@@ -188,3 +197,275 @@ class PettyCashSettlement(Document):
         self.db_set("payment_status", "Paid")
 
         return journal_entry.name
+    def generate_pdf_report(self):
+        html = self.build_pdf_html()
+
+        pdf_content = get_pdf(html)
+
+        file_doc = frappe.get_doc({
+            "doctype": "File",
+            "file_name": f"{self.name}.pdf",
+            "content": pdf_content,
+            "is_private": 1,
+            "attached_to_doctype": "Petty Cash Settlement",
+            "attached_to_name": self.name,
+        })
+
+        file_doc.save(ignore_permissions=True)
+
+        return file_doc.file_url
+
+    def build_pdf_html(self):
+        expense_rows = []
+
+        for number, expense in enumerate(self.expenses, start=1):
+            expense_rows.append(
+                f"""
+                <tr>
+                    <td class="number">{number}</td>
+                    <td>{escape_html(str(expense.expense_date or ""))}</td>
+                    <td>{escape_html(expense.expense_item or "")}</td>
+                    <td>{escape_html(expense.invoice_number or "")}</td>
+                    <td>{escape_html(expense.supplier or "")}</td>
+                    <td>{escape_html(expense.related_details or "")}</td>
+                    <td class="amount">
+                        {flt(expense.amount, 2):,.2f}
+                    </td>
+                </tr>
+                """
+            )
+
+        return f"""
+        <style>
+
+            @page {{
+                size: A4 landscape;
+                margin: 0.6in;
+            }}
+
+            .report {{
+                font-family: Calibri, Arial, sans-serif;
+                font-size: 10pt;
+                color: #000;
+            }}
+
+            .title {{
+                text-align: center;
+                font-size: 20pt;
+                font-weight: bold;
+                margin-bottom: 20px;
+            }}
+
+            .subtitle {{
+                text-align: center;
+                font-size: 10pt;
+                margin-bottom: 20px;
+            }}
+
+            .info-table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }}
+
+            .info-table td {{
+                border: 1px solid #000;
+                padding: 6px;
+            }}
+
+            .info-label {{
+                font-weight: bold;
+                background: #d9eaf7;
+                width: 16%;
+            }}
+
+            .expense-table {{
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+            }}
+
+            .expense-table th,
+            .expense-table td {{
+                border: 1px solid #000;
+                padding: 4px;
+                vertical-align: middle;
+            }}
+
+            .expense-table th {{
+                background: #9dc3e6;
+                font-weight: bold;
+                text-align: center;
+                font-size: 9pt;
+            }}
+
+            .expense-table td {{
+                font-size: 9pt;
+            }}
+
+            .number {{
+                width: 4%;
+                text-align: center;
+            }}
+
+            .date {{
+                width: 9%;
+            }}
+
+            .item {{
+                width: 17%;
+            }}
+
+            .invoice {{
+                width: 11%;
+            }}
+
+            .supplier {{
+                width: 14%;
+            }}
+
+            .details {{
+                width: 29%;
+            }}
+
+            .amount {{
+                width: 16%;
+                text-align: right;
+            }}
+
+            .totals-table {{
+                width: 40%;
+                margin-left: auto;
+                margin-top: 20px;
+                border-collapse: collapse;
+            }}
+
+            .totals-table td {{
+                border: 1px solid #000;
+                padding: 6px;
+            }}
+
+            .total-label {{
+                font-weight: bold;
+                background: #d9eaf7;
+            }}
+
+            .footer {{
+                margin-top: 30px;
+                font-size: 9pt;
+            }}
+
+        </style>
+
+        <div class="report">
+
+            <div class="title">
+                PETTY CASH SETTLEMENT REPORT
+            </div>
+
+            <div class="subtitle">
+                Settlement: {escape_html(self.name)}
+            </div>
+
+            <table class="info-table">
+
+                <tr>
+                    <td class="info-label">Center Officer</td>
+                    <td>{escape_html(self.center_officer or "")}</td>
+
+                    <td class="info-label">Month</td>
+                    <td>{formatdate(self.month) if self.month else ""}</td>
+                </tr>
+
+                <tr>
+                    <td class="info-label">Cost Center</td>
+                    <td>{escape_html(self.cost_center or "")}</td>
+
+                    <td class="info-label">Petty Cash Account</td>
+                    <td>{escape_html(self.petty_cash_account or "")}</td>
+                </tr>
+
+                <tr>
+                    <td class="info-label">Petty Cash Limit</td>
+                    <td>{flt(self.petty_cash_limit, 2):,.2f}</td>
+
+                    <td class="info-label">Payment Method</td>
+                    <td>{escape_html(self.payment_method or "")}</td>
+                </tr>
+
+                <tr>
+                    <td class="info-label">Payment Date</td>
+                    <td>{formatdate(self.payment_date) if self.payment_date else ""}</td>
+
+                    <td class="info-label">Payment Status</td>
+                    <td>{escape_html(self.payment_status or "")}</td>
+                </tr>
+
+            </table>
+
+            <table class="expense-table">
+
+                <thead>
+                    <tr>
+                        <th class="number">No.</th>
+                        <th class="date">Date</th>
+                        <th class="item">Expense Item</th>
+                        <th class="invoice">Invoice No.</th>
+                        <th class="supplier">Supplier</th>
+                        <th class="details">Related Details</th>
+                        <th class="amount">Amount</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {"".join(expense_rows)}
+                </tbody>
+
+            </table>
+
+            <table class="totals-table">
+
+                <tr>
+                    <td class="total-label">Petty Cash Limit</td>
+                    <td class="amount">
+                        {flt(self.petty_cash_limit, 2):,.2f}
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="total-label">Total Expenses</td>
+                    <td class="amount">
+                        {flt(self.total_expenses, 2):,.2f}
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="total-label">Remaining Balance</td>
+                    <td class="amount">
+                        {flt(self.remaining_balance, 2):,.2f}
+                    </td>
+                </tr>
+
+            </table>
+
+            <div class="footer">
+
+                <p>
+                    <strong>Journal Entry:</strong>
+                    {escape_html(self.journal_entry or "")}
+                </p>
+
+                <p>
+                    <strong>Payment Status:</strong>
+                    {escape_html(self.payment_status or "")}
+                </p>
+
+                <p>
+                    This report was generated automatically by the
+                    Center Expense Management system.
+                </p>
+
+            </div>
+
+        </div>
+        """
