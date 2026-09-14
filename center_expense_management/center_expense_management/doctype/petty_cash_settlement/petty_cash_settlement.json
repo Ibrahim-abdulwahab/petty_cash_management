@@ -23,7 +23,8 @@
   "payment_method",
   "payment_date",
   "journal_entry",
-  "payment_status"
+  "payment_status",
+  "report_email"
  ],
  "fields": [
   {
@@ -153,13 +154,19 @@
    "label": "Payment Status",
    "options": "Unpaid\nPaid",
    "read_only": 1
+  },
+  {
+   "fieldname": "report_email",
+   "fieldtype": "Data",
+   "label": "Report Email",
+   "options": "Email"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-10 15:08:53.444540",
+ "modified": "2026-09-11 15:36:56.111358",
  "modified_by": "Administrator",
  "module": "Center Expense Management",
  "name": "Petty Cash Settlement",
