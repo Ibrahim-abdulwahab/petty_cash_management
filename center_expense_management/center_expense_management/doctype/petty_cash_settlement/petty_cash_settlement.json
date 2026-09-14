@@ -19,6 +19,10 @@
   "remaining_balance",
   "expenses_section",
   "expenses",
+  "expense_account_section",
+  "account",
+  "column_break_zbjg",
+  "amount",
   "payment_information_section",
   "payment_method",
   "payment_date",
@@ -143,6 +147,7 @@
    "options": "Whish"
   },
   {
+   "default": "Today",
    "fieldname": "payment_date",
    "fieldtype": "Date",
    "label": "Payment Date"
@@ -160,13 +165,33 @@
    "fieldtype": "Data",
    "label": "Report Email",
    "options": "Email"
+  },
+  {
+   "fieldname": "expense_account_section",
+   "fieldtype": "Section Break",
+   "label": "Account"
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "label": "Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount"
+  },
+  {
+   "fieldname": "column_break_zbjg",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-11 15:36:56.111358",
+ "modified": "2026-09-14 15:49:23.932354",
  "modified_by": "Administrator",
  "module": "Center Expense Management",
  "name": "Petty Cash Settlement",

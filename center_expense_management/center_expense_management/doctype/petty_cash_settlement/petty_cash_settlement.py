@@ -14,8 +14,10 @@ class PettyCashSettlement(Document):
     def validate(self):
         self.validate_center_officer_and_month()
         self.load_petty_cash_configuration()
+        self.load_account_allocation()
         self.validate_expenses()
         self.calculate_totals()
+        self.validate_finance_account()
 
     def on_update(self):
         if (
@@ -27,6 +29,22 @@ class PettyCashSettlement(Document):
 
             pdf_url = self.generate_pdf_report()
             self.send_pdf_report_by_email(pdf_url)
+
+
+    def validate_finance_account(self):
+        if not self._doc_before_save:
+            return
+
+        previous_state = self._doc_before_save.get("workflow_state")
+
+        if (
+            previous_state == "Pending Finance Review"
+            and self.workflow_state == "Pending Operations Approval"
+            and not self.account
+        ):
+            frappe.throw(
+                "Finance must select an Account before approving the settlement."
+            )
 
     def validate_center_officer_and_month(self):
         if not self.center_officer or not self.month:
@@ -66,6 +84,25 @@ class PettyCashSettlement(Document):
         self.petty_cash_account = config.petty_cash_account
         self.petty_cash_limit = config.petty_cash_limit
 
+
+    def load_account_allocation(self):
+        if not self.account:
+            return
+
+        allocation = frappe.db.get_value(
+            "Petty Cash Account Allocation",
+            {"account": self.account},
+            ["amount"],
+            as_dict=True
+        )
+
+        if not allocation:
+            frappe.throw(
+                "No Petty Cash Account Allocation was found for this Account."
+            )
+
+        self.amount = allocation.amount
+
     def validate_expenses(self):
         if not self.expenses:
             frappe.throw(
@@ -79,10 +116,6 @@ class PettyCashSettlement(Document):
                     f"Expense row {expense.idx}: Amount must be greater than zero."
                 )
 
-            if not expense.expense_account:
-                frappe.throw(
-                    f"Expense row {expense.idx}: Expense Account is required."
-                )
 
             if not expense.receipt:
                 frappe.throw(
@@ -152,19 +185,21 @@ class PettyCashSettlement(Document):
                 "The Cost Center and Whish account belong to different companies."
             )
 
-        for expense in self.expenses:
-            expense_account_company = frappe.db.get_value(
-                "Account",
-                expense.expense_account,
-                "company"
+        if not self.account:
+            frappe.throw(
+                "An Account must be selected during Finance Review."
             )
 
-            if expense_account_company != company:
-                frappe.throw(
-                    f"Expense row {expense.idx}: "
-                    f"Expense Account {expense.expense_account} "
-                    f"does not belong to Company {company}."
-                )
+        account_company = frappe.db.get_value(
+            "Account",
+            self.account,
+            "company"
+        )
+
+        if account_company != company:
+            frappe.throw(
+                f"Account {self.account} does not belong to Company {company}."
+            )
 
         journal_entry = frappe.new_doc("Journal Entry")
 
@@ -174,15 +209,14 @@ class PettyCashSettlement(Document):
             f"Petty Cash Settlement {self.name}"
         )
 
-        for expense in self.expenses:
-            journal_entry.append(
-                "accounts",
-                {
-                    "account": expense.expense_account,
-                    "debit_in_account_currency": expense.amount,
-                    "cost_center": self.cost_center
-                }
-            )
+        journal_entry.append(
+            "accounts",
+            {
+                "account": self.account,
+                "debit_in_account_currency": self.total_expenses,
+                "cost_center": self.cost_center
+            }
+        )
 
         journal_entry.append(
             "accounts",

@@ -9,6 +9,14 @@ frappe.ui.form.on('Petty Cash Settlement', {
 
     refresh: function(frm) {
         calculate_totals(frm);
+
+        frm.set_df_property(
+            'account',
+            'read_only',
+            frm.doc.workflow_state !== 'Pending Finance Review'
+        );
+
+        frm.set_df_property('amount', 'read_only', 1);
     },
 
     expenses_add: function(frm) {
@@ -17,6 +25,10 @@ frappe.ui.form.on('Petty Cash Settlement', {
 
     expenses_remove: function(frm) {
         calculate_totals(frm);
+    },
+
+    account: function(frm) {
+        load_account_allocation(frm);
     },
 
     before_workflow_action: function(frm) {
@@ -136,6 +148,33 @@ function load_petty_cash_configuration(frm) {
         frm.set_value('petty_cash_limit', config.petty_cash_limit);
 
         calculate_totals(frm);
+    });
+}
+
+function load_account_allocation(frm) {
+    if (!frm.doc.account) {
+        return;
+    }
+
+    frappe.db.get_list('Petty Cash Account Allocation', {
+        filters: {
+            account: frm.doc.account
+        },
+        fields: [
+            'amount'
+        ],
+        limit: 1
+    }).then(function(records) {
+        if (records.length === 0) {
+            frappe.msgprint(
+                __('No Account Allocation was found for this Account.')
+            );
+            return;
+        }
+
+        let allocation = records[0];
+
+        frm.set_value('amount', allocation.amount);
     });
 }
 
