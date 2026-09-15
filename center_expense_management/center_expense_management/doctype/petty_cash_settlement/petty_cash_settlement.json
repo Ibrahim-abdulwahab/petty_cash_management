@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "petty_cash_settlement_.YYYY.####",
  "creation": "2026-08-30 16:27:41.481620",
  "doctype": "DocType",
  "engine": "InnoDB",
