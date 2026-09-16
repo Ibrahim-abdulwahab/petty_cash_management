@@ -13,6 +13,11 @@ fixtures = [
         ]
     }
 ]
+scheduler_events = {
+    "daily": [
+        "center_expense_management.tasks.create_monthly_petty_cash_whish"
+    ]
+}
 # Apps
 # ------------------
 
