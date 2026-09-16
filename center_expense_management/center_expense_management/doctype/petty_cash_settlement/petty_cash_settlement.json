@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "petty_cash_settlement_.YYYY.####",
+ "autoname": "PCS-.YYYY.-.####",
  "creation": "2026-08-30 16:27:41.481620",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -52,7 +52,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Center Officer",
-   "options": "User",
+   "options": "Employee",
    "reqd": 1
   },
   {
@@ -148,7 +148,6 @@
    "options": "Whish"
   },
   {
-   "default": "Today",
    "fieldname": "payment_date",
    "fieldtype": "Date",
    "label": "Payment Date"
@@ -192,10 +191,11 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-14 15:49:23.932354",
+ "modified": "2026-09-16 14:25:29.237239",
  "modified_by": "Administrator",
  "module": "Center Expense Management",
  "name": "Petty Cash Settlement",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {

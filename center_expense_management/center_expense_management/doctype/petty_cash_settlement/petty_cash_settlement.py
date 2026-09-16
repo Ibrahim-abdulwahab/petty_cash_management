@@ -4,6 +4,7 @@
 import frappe
 
 from frappe import _
+from erpnext.accounts.utils import get_balance_on
 from frappe.model.document import Document
 from frappe.utils import escape_html, flt, formatdate
 from frappe.utils.pdf import get_pdf
@@ -14,7 +15,7 @@ class PettyCashSettlement(Document):
     def validate(self):
         self.validate_center_officer_and_month()
         self.load_petty_cash_configuration()
-        self.load_account_allocation()
+        self.load_account_balance()
         self.validate_expenses()
         self.calculate_totals()
         self.validate_finance_account()
@@ -66,6 +67,57 @@ class PettyCashSettlement(Document):
             frappe.throw(
                 "A Petty Cash Settlement already exists for this Center Officer and month."
             )
+    def update_petty_cash_whish(self):
+        if not self.payment_date:
+            return
+
+        # Convert payment date to the first day of that month.
+        # Example: 2026-09-16 -> 2026-09-01
+        whish_month = frappe.utils.get_first_day(self.payment_date)
+
+        # Find the Petty Cash Whish for the payment month.
+        whish_name = frappe.db.get_value(
+            "Petty Cash Whish",
+            {"month_and_year": whish_month},
+            "name"
+        )
+
+        if not whish_name:
+            frappe.throw(
+                _(
+                    "No Petty Cash Whish was found for {0}."
+                ).format(
+                    frappe.utils.formatdate(
+                        whish_month,
+                        "MMMM yyyy"
+                    )
+                )
+            )
+
+        # Center Officer is linked to Employee.
+        employee = frappe.get_doc("Employee", self.center_officer)
+
+        # Load the existing Petty Cash Whish.
+        whish = frappe.get_doc("Petty Cash Whish", whish_name)
+
+        # Prevent the same employee from being added twice.
+        for row in whish.employees:
+            if row.employee_name == employee.employee_name:
+                return
+
+        # Add the employee's payment information.
+        whish.append(
+            "employees",
+            {
+                "employee_name": employee.employee_name,
+                "phone_number": None,
+                "whish_id": None,
+                "salary_received_net": self.total_expenses,
+                "currency": None,
+            }
+        )
+
+        whish.save()
 
     def load_petty_cash_configuration(self):
         config = frappe.db.get_value(
@@ -84,24 +136,24 @@ class PettyCashSettlement(Document):
         self.petty_cash_account = config.petty_cash_account
         self.petty_cash_limit = config.petty_cash_limit
 
-
-    def load_account_allocation(self):
+    @frappe.whitelist()
+    def load_account_balance(self):
         if not self.account:
-            return
+           self.amount = 0
+           return
 
-        allocation = frappe.db.get_value(
-            "Petty Cash Account Allocation",
-            {"account": self.account},
-            ["amount"],
-            as_dict=True
+        account = frappe.get_cached_doc("Account", self.account)
+
+        if account.is_group:
+           frappe.throw(
+               _("Please select a ledger account, not an account group.")
+           )
+
+        self.amount = get_balance_on(
+          account=self.account,
+          date=frappe.utils.today(),
+          company=account.company
         )
-
-        if not allocation:
-            frappe.throw(
-                "No Petty Cash Account Allocation was found for this Account."
-            )
-
-        self.amount = allocation.amount
 
     def validate_expenses(self):
         if not self.expenses:
@@ -151,10 +203,8 @@ class PettyCashSettlement(Document):
                 "Payment Method must be Whish."
             )
 
-        if not self.payment_date:
-            frappe.throw(
-                "Payment Date is required before creating the Journal Entry."
-            )
+        self.payment_date = frappe.utils.today()
+        self.db_set("payment_date", self.payment_date)
 
         whish_account = frappe.db.get_value(
             "Account",
@@ -231,6 +281,7 @@ class PettyCashSettlement(Document):
 
         self.db_set("journal_entry", journal_entry.name)
         self.db_set("payment_status", "Paid")
+        self.update_petty_cash_whish()
 
         return journal_entry.name
     def generate_pdf_report(self):
@@ -537,4 +588,14 @@ class PettyCashSettlement(Document):
                     "fcontent": open(file_path, "rb").read(),
                 }
             ],
+        )
+    @frappe.whitelist()
+    def add_return_comment(self, reason, action):
+        self.add_comment(
+            "Comment",
+            text=(
+                f"<b>Settlement Returned</b><br>"
+                f"Action: {action}<br>"
+                f"Reason: {reason}"
+            )
         )

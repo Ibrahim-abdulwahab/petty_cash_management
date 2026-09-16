@@ -17,6 +17,7 @@ frappe.ui.form.on('Petty Cash Settlement', {
         );
 
         frm.set_df_property('amount', 'read_only', 1);
+        frm.set_df_property('payment_date', 'read_only', 1);
     },
 
     expenses_add: function(frm) {
@@ -28,10 +29,55 @@ frappe.ui.form.on('Petty Cash Settlement', {
     },
 
     account: function(frm) {
-        load_account_allocation(frm);
+        load_account_balance(frm);
+    },
+
+    payment_status: function(frm) {
+        if (frm.doc.payment_status === "Paid") {
+            frm.set_value("payment_date", frappe.datetime.get_today());
+        }
     },
 
     before_workflow_action: function(frm) {
+
+        const return_actions = [
+         'Return to Center Officer',
+         'Return to Accountant',
+         'Return to Finance'
+        ];
+
+       if (return_actions.includes(frm.selected_workflow_action)) {
+          const action = frm.selected_workflow_action;
+
+          frappe.dom.unfreeze();
+
+          frappe.prompt(
+             [
+                  {
+                      fieldname: 'return_reason',
+                      fieldtype: 'Small Text',
+                      label: __('Reason for Return'),
+                      reqd: 1
+                  }
+             ],
+             function(values) {
+                frm.call('add_return_comment', {
+                    reason: values.return_reason,
+                    action: action
+                }).then(function() {
+                // Prevent this action from being intercepted again
+                   frm.selected_workflow_action = null;
+
+                // Execute the workflow action
+                   frm.workflow_action(action);
+                });
+            },
+            __('Return Settlement'),
+            __('Return')
+          );
+
+          return false;
+       }
         // Receipt required when Center Officer submits
         if (frm.selected_workflow_action === 'Submit for Accountant Review') {
             (frm.doc.expenses || []).forEach(function(row) {
@@ -151,31 +197,19 @@ function load_petty_cash_configuration(frm) {
     });
 }
 
-function load_account_allocation(frm) {
+function load_account_balance(frm) {
     if (!frm.doc.account) {
+        frm.set_value('amount', 0);
         return;
     }
 
-    frappe.db.get_list('Petty Cash Account Allocation', {
-        filters: {
-            account: frm.doc.account
-        },
-        fields: [
-            'amount'
-        ],
-        limit: 1
-    }).then(function(records) {
-        if (records.length === 0) {
-            frappe.msgprint(
-                __('No Account Allocation was found for this Account.')
-            );
+    frm.call('load_account_balance').then(function(r){
+        if (r.message === undefined || r.message === null){
             return;
         }
 
-        let allocation = records[0];
-
-        frm.set_value('amount', allocation.amount);
-    });
+        frm.set_value('amount',r.message);
+   });
 }
 
 function calculate_totals(frm) {
